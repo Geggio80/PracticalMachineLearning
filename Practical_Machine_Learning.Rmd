@@ -1,0 +1,130 @@
+---
+title: 'Practical Machine Learning: Course Project'
+author: "Eugenio Del Prete"
+date: "Saturday, September 20, 2014"
+output: html_document
+---
+
+
+### 1. Introduction to data
+Using devices such as _Jawbone Up_, _Nike FuelBand_, and _Fitbit_, it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways: class A represents the right way, classes B,C,D,E the wrong ones. More information is available from the website [here][1]. Moreover, data are divided in a [training set][2] and a [testing set][3], manually downloaded from the previous links.
+
+
+### 2. Brief workflow
+* Data have been manually downloaded
+* Data have been pre-processed:
+    * adjusting NA values and eliminating columns with only NA values
+    * erasing columns that are useless for prediction
+* Random Forest algorithm has been used to create a model
+* Confusion matrices and accuracies have been showed to explain the model
+* The model has been used to make a prediction on a test set
+* An appendix shows:
+    * another model calculated just one time
+    * a variable importance plot for the previous model
+
+
+### 3. Pre-processing data
+After having manually downloaded data and put them in the working folder, they have been loaded in the global environment, with a clear choice about NA elements:
+
+```{r data,echo = TRUE}
+train_data <- read.csv("pml-training.csv",na.strings=c("NA",""))
+test_data <- read.csv("pml-testing.csv",na.strings=c("NA",""))
+```
+
+and it's possible to see the first has 19622 observations, the second has 20 observations, both with 160 variables, some of them really useless because of NAs prensence. Making a control, it's clear only 60 variables haven't NAs (first column of the tables), so the others must be erased for a correct prediction:
+
+```{r na_elimination,echo = TRUE}
+# for train_data
+na_train <- sapply(train_data, function(x) {sum(is.na(x))})
+table(na_train)
+no_col_train <- colSums(is.na(train_data)) == 19216
+train_data_eff <- train_data[!no_col_train]
+sum(is.na(train_data_eff))
+
+# for test_data
+na_test <- sapply(test_data, function(x) {sum(is.na(x))})
+table(na_test)
+no_col_test <- colSums(is.na(test_data)) == 20
+test_data_eff <- test_data[!no_col_test]
+sum(is.na(test_data_eff))
+```
+
+Futhermore, the first 7 variables are not useful for a prediction and they have been kicked out:
+
+```{r variable_elimination,echo = TRUE}
+train_data_eff <- train_data_eff[,c(7:60)]
+test_data_eff <- test_data_eff[,c(7:60)]
+```
+
+
+### 4. Building and evaluating model
+At first, it has been loaded **_caret_** package and it has been created a partition from **train_data_eff**:
+
+```{r partition,echo = TRUE}
+library(caret)
+in_train<- createDataPartition(y = train_data_eff$classe,p = 0.7,list = FALSE)
+tr <- train_data_eff[in_train, ]
+ts <- train_data_eff[-in_train, ]
+```
+
+Then, it has been chosen Random Forest machine learning algorithm with **_randomForest_** package (_n.b. The comment lines indicate that it has been tried an algorithm with 4-fold cross validation, but the system has crushed after a long computing time, so an alternative method has been found_):
+
+```{r model,echo = TRUE}
+library(randomForest)
+
+# model <- train(classe ~ ., data = tr, method = "rf", prox = TRUE, 
+#                trControl = trainControl(method = "cv", number = 4)
+
+model <- randomForest(classe~.,data = tr)
+train_predict <- predict(model,tr)
+test_predict <- predict(model,ts)
+confusionMatrix(train_predict,tr$classe)
+confusionMatrix(test_predict,ts$classe)
+```
+
+and it has been obtained an accuracy of 100 % using **tr** (in sample, as expected) and of around 99.7 % using **ts** (out of sample, a really good value), with relative out of sample error of 0.3 %.
+
+
+### 5. Prediction
+
+Using the previous model to make a prediction on **test_data_eff**, it has been obtained:
+
+```{r answers,echo = TRUE}
+answers <- as.character(predict(model,test_data_eff))
+answers
+```
+
+a character array passed to the function in this [page][4], in order to know if the results are correct (yes, they are!).
+
+
+### 6. Appendix
+Some problems have emerged because of a long computing time in calculating model, but with only **one try**, it has been possible to show another example that gives the same result for the previous prediction (**file .rds is available in GitHub repository**):
+
+```{r appendix,echo = TRUE}
+# model2 <- train(classe ~ ., data = train_data_eff, method = "rf")
+# saveRDS(model2,"model2.rds")
+
+model2 <- readRDS("model2.rds")
+train_predict2 <- predict(model2,tr)
+test_predict2 <- predict(model2,ts)
+confusionMatrix(train_predict2,tr$classe)
+confusionMatrix(test_predict2,ts$classe)
+answers2 <- as.character(predict(model2,test_data_eff))
+answers2
+```
+
+it's possible to notice that the prediction **answers2** is equal to **answer**, but with an accuracy of 100 % (both in example and out of example). At the end, it has been showed a graph on the variable importance for the **model2** (_n.b. it is possible with the **_train_** command, not with **_randomForest_**_):
+
+```{r importance,echo = TRUE}
+var_imp <- varImp(model2)
+plot(var_imp, main = "Variable Importance of Model 2", top = 25)
+```
+
+where only 8-9 variables seem to be really explanatory for the model 2 and following prediction.
+
+
+
+[1]: http://groupware.les.inf.puc-rio.br/har
+[2]: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+[3]: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+[4]: https://class.coursera.org/predmachlearn-005/assignment/view?assignment_id=5
